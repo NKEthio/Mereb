@@ -1,0 +1,470 @@
+# Scalable E-learning Web Application (AI-Ready Architecture, AI Features Deferred)
+
+## 1) Project Structure
+
+```txt
+mereb-elearning/
+├── app/
+│   ├── (marketing)/
+│   │   ├── page.tsx
+│   │   └── pricing/page.tsx
+│   ├── (auth)/
+│   │   ├── login/page.tsx
+│   │   └── register/page.tsx
+│   ├── (student)/
+│   │   ├── dashboard/page.tsx
+│   │   ├── courses/[courseId]/page.tsx
+│   │   ├── lessons/[lessonId]/page.tsx
+│   │   └── quizzes/[quizId]/page.tsx
+│   ├── (teacher)/
+│   │   ├── dashboard/page.tsx
+│   │   ├── courses/new/page.tsx
+│   │   ├── courses/[courseId]/edit/page.tsx
+│   │   └── courses/[courseId]/progress/page.tsx
+│   ├── (admin)/
+│   │   └── dashboard/page.tsx
+│   ├── api/
+│   │   ├── auth/[...nextauth]/route.ts
+│   │   ├── courses/route.ts
+│   │   ├── courses/[courseId]/route.ts
+│   │   ├── modules/route.ts
+│   │   ├── modules/[moduleId]/route.ts
+│   │   ├── lessons/route.ts
+│   │   ├── lessons/[lessonId]/route.ts
+│   │   ├── quizzes/route.ts
+│   │   ├── quizzes/[quizId]/submit/route.ts
+│   │   ├── enrollments/route.ts
+│   │   ├── progress/route.ts
+│   │   └── submissions/route.ts
+│   ├── layout.tsx
+│   ├── globals.css
+│   └── page.tsx
+├── components/
+│   ├── course/CourseCard.tsx
+│   ├── lesson/LessonViewer.tsx
+│   ├── quiz/QuizForm.tsx
+│   ├── progress/ProgressBar.tsx
+│   ├── submission/SubmissionForm.tsx
+│   ├── dashboard/StatsCard.tsx
+│   └── shared/{Button,Input,Modal}.tsx
+├── lib/
+│   ├── auth.ts
+│   ├── prisma.ts
+│   ├── rbac.ts
+│   ├── validations/
+│   │   ├── course.ts
+│   │   ├── quiz.ts
+│   │   └── submission.ts
+│   └── services/
+│       ├── course.service.ts
+│       ├── progress.service.ts
+│       └── quiz.service.ts
+├── prisma/
+│   ├── schema.prisma
+│   └── seed.ts
+├── public/
+├── types/
+│   ├── api.ts
+│   └── domain.ts
+├── middleware.ts
+├── tailwind.config.ts
+├── postcss.config.js
+├── next.config.js
+└── package.json
+```
+
+### Major Folder Purposes
+- `app/`: Next.js App Router pages + route handlers.
+- `components/`: Reusable UI blocks (course, lesson, quiz, progress, submission).
+- `lib/`: Shared server/client logic (auth, RBAC, Prisma client, validators, services).
+- `prisma/`: Data model, migrations, seed logic.
+- `app/api/*`: REST-style route handlers for core domain actions.
+
+---
+
+## 2) Database Schema (Prisma)
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+  IMAGE
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+enum SubmissionType {
+  TEXT
+  CODE
+  FILE
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  REVIEWED
+}
+
+model User {
+  id             String        @id @default(cuid())
+  name           String?
+  email          String        @unique
+  passwordHash   String
+  role           Role          @default(STUDENT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  taughtCourses  Course[]      @relation("TeacherCourses")
+  enrollments    Enrollment[]
+  progress       Progress[]
+  submissions    Submission[]
+  quizAttempts   QuizAttempt[]
+}
+
+model Course {
+  id             String        @id @default(cuid())
+  title          String
+  description    String?
+  thumbnailUrl   String?
+  published      Boolean       @default(false)
+  teacherId      String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  teacher        User          @relation("TeacherCourses", fields: [teacherId], references: [id])
+  modules        Module[]
+  enrollments    Enrollment[]
+}
+
+model Module {
+  id             String        @id @default(cuid())
+  courseId       String
+  title          String
+  orderIndex     Int
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  course         Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons        Lesson[]
+
+  @@unique([courseId, orderIndex])
+}
+
+model Lesson {
+  id             String        @id @default(cuid())
+  moduleId       String
+  title          String
+  type           LessonType
+  content        String
+  orderIndex     Int
+  isAssignment   Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  module         Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  quiz           Quiz?
+  progress       Progress[]
+  submissions    Submission[]
+
+  @@unique([moduleId, orderIndex])
+}
+
+model Quiz {
+  id             String        @id @default(cuid())
+  lessonId       String        @unique
+  passingScore   Int           @default(70)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  lesson         Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions      Question[]
+  attempts       QuizAttempt[]
+}
+
+model Question {
+  id             String        @id @default(cuid())
+  quizId         String
+  prompt         String
+  type           QuestionType
+  options        Json?
+  correctAnswer  String
+  orderIndex     Int
+
+  quiz           Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, orderIndex])
+}
+
+model Enrollment {
+  id             String        @id @default(cuid())
+  userId         String
+  courseId       String
+  enrolledAt     DateTime      @default(now())
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course         Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+}
+
+model Progress {
+  id             String        @id @default(cuid())
+  userId         String
+  lessonId       String
+  completed      Boolean       @default(false)
+  completedAt    DateTime?
+  lastScore      Int?
+  updatedAt      DateTime      @updatedAt
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson         Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+model QuizAttempt {
+  id             String        @id @default(cuid())
+  quizId         String
+  userId         String
+  answers        Json
+  score          Int
+  passed         Boolean
+  attemptedAt    DateTime      @default(now())
+
+  quiz           Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Submission {
+  id             String           @id @default(cuid())
+  lessonId       String
+  userId         String
+  type           SubmissionType
+  content        String
+  status         SubmissionStatus @default(SUBMITTED)
+  grade          Int?
+  feedback       String?
+  submittedAt    DateTime         @default(now())
+  reviewedAt     DateTime?
+
+  lesson         Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+```
+
+---
+
+## 3) Core Features Implementation (Starter Patterns)
+
+### Authentication + RBAC
+```ts
+// lib/rbac.ts
+export const canManageCourse = (role: "STUDENT" | "TEACHER" | "ADMIN") =>
+  role === "TEACHER" || role === "ADMIN";
+```
+
+```ts
+// app/api/courses/route.ts (POST)
+const session = await requireAuth();
+if (!canManageCourse(session.user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+const data = courseSchema.parse(await req.json());
+const course = await prisma.course.create({ data: { ...data, teacherId: session.user.id } });
+return NextResponse.json(course, { status: 201 });
+```
+
+### Course Creation (CRUD + modules/lessons)
+```ts
+// lib/services/course.service.ts
+export async function createCourseWithModules(input: CreateCourseInput, teacherId: string) {
+  return prisma.course.create({
+    data: {
+      title: input.title,
+      description: input.description,
+      teacherId,
+      modules: {
+        create: input.modules.map((m, i) => ({
+          title: m.title,
+          orderIndex: i,
+          lessons: {
+            create: m.lessons.map((l, j) => ({
+              title: l.title,
+              type: l.type,
+              content: l.content,
+              orderIndex: j
+            }))
+          }
+        }))
+      }
+    },
+    include: { modules: { include: { lessons: true } } }
+  });
+}
+```
+
+### Lesson Rendering (video/text/image)
+```tsx
+// components/lesson/LessonViewer.tsx
+export function LessonViewer({ lesson }: { lesson: { type: "VIDEO" | "TEXT" | "IMAGE"; content: string } }) {
+  if (lesson.type === "VIDEO") return <video controls className="w-full" src={lesson.content} />;
+  if (lesson.type === "IMAGE") return <img src={lesson.content} alt="Lesson media" className="w-full rounded" />;
+  return <article className="prose" dangerouslySetInnerHTML={{ __html: lesson.content }} />;
+}
+```
+
+### Quiz System (create, submit, score)
+```ts
+// app/api/quizzes/[quizId]/submit/route.ts
+const { answers } = await req.json();
+const quiz = await prisma.quiz.findUnique({ where: { id: params.quizId }, include: { questions: true } });
+const total = quiz.questions.length;
+const correct = quiz.questions.filter((q) => answers[q.id] === q.correctAnswer).length;
+const score = Math.round((correct / total) * 100);
+const passed = score >= quiz.passingScore;
+
+await prisma.quizAttempt.create({ data: { quizId: quiz.id, userId: session.user.id, answers, score, passed } });
+await prisma.progress.upsert({
+  where: { userId_lessonId: { userId: session.user.id, lessonId: quiz.lessonId } },
+  update: { lastScore: score, completed: passed, completedAt: passed ? new Date() : null },
+  create: { userId: session.user.id, lessonId: quiz.lessonId, lastScore: score, completed: passed, completedAt: passed ? new Date() : null }
+});
+return NextResponse.json({ score, passed });
+```
+
+### Enrollment System
+```ts
+// app/api/enrollments/route.ts (POST)
+const { courseId } = await req.json();
+const enrollment = await prisma.enrollment.create({ data: { courseId, userId: session.user.id } });
+return NextResponse.json(enrollment, { status: 201 });
+```
+
+### Progress Tracking
+```ts
+// app/api/progress/route.ts (PATCH)
+const { lessonId, completed } = await req.json();
+const progress = await prisma.progress.upsert({
+  where: { userId_lessonId: { userId: session.user.id, lessonId } },
+  update: { completed, completedAt: completed ? new Date() : null },
+  create: { userId: session.user.id, lessonId, completed, completedAt: completed ? new Date() : null }
+});
+return NextResponse.json(progress);
+```
+
+### Submission System
+```ts
+// app/api/submissions/route.ts (POST)
+const { lessonId, type, content } = await req.json();
+const submission = await prisma.submission.create({
+  data: { lessonId, userId: session.user.id, type, content }
+});
+return NextResponse.json(submission, { status: 201 });
+```
+
+```ts
+// Teacher reads submissions
+await prisma.submission.findMany({
+  where: { lesson: { module: { course: { teacherId: session.user.id } } } },
+  include: { user: true, lesson: true }
+});
+```
+
+---
+
+## 4) API Design (Route Handlers)
+
+### `/api/auth`
+- `POST /api/auth/register`
+  - Request: `{ "name": "Sara", "email": "sara@example.com", "password": "***", "role": "STUDENT" }`
+  - Response: `{ "id": "usr_1", "email": "sara@example.com", "role": "STUDENT" }`
+- `POST /api/auth/login`
+  - Request: `{ "email": "sara@example.com", "password": "***" }`
+  - Response: `{ "accessToken": "jwt", "user": { "id": "usr_1", "role": "STUDENT" } }`
+
+### `/api/courses`
+- `GET /api/courses` -> list published courses
+- `POST /api/courses` (teacher/admin) -> create course
+- `PATCH /api/courses/:courseId` -> update
+- `DELETE /api/courses/:courseId` -> delete
+
+### `/api/modules`
+- `POST /api/modules` -> add module to course
+- `PATCH /api/modules/:moduleId` -> edit module
+- `DELETE /api/modules/:moduleId` -> delete module
+
+### `/api/lessons`
+- `POST /api/lessons` -> add lesson
+- `PATCH /api/lessons/:lessonId` -> edit lesson
+- `DELETE /api/lessons/:lessonId` -> delete lesson
+
+### `/api/quizzes`
+- `POST /api/quizzes` -> create quiz + questions
+- `POST /api/quizzes/:quizId/submit` -> submit answers; returns score
+
+### `/api/enrollments`
+- `POST /api/enrollments` -> enroll student
+- `GET /api/enrollments?courseId=...` -> enrolled students (teacher/admin)
+
+### `/api/progress`
+- `GET /api/progress?courseId=...` -> student progress in course
+- `PATCH /api/progress` -> mark lesson completion
+
+### `/api/submissions`
+- `POST /api/submissions` -> create submission
+- `GET /api/submissions?lessonId=...` -> teacher views submissions
+- `PATCH /api/submissions/:submissionId` -> teacher adds grade/feedback
+
+---
+
+## 5) Frontend Pages
+
+### Student
+- `Student Dashboard`: enrolled courses, completion %, upcoming quizzes.
+- `Course Page`: modules/lessons outline + progress.
+- `Lesson Page`: dynamic `LessonViewer`, complete button, assignment section.
+- `Quiz Page`: question flow, timer (optional), result view.
+
+### Teacher
+- `Teacher Course Builder`: create/edit course, modules, lessons, quizzes.
+- `Student Progress View`: per-course student analytics, quiz attempts, completion rates.
+
+---
+
+## 6) Reusable UI Components
+
+- `CourseCard`: title, teacher, progress/publish status.
+- `LessonViewer`: renders video/text/image based on `LessonType`.
+- `QuizForm`: renders MCQ/true-false, validates, submits answers.
+- `ProgressBar`: displays completion percentage.
+- `SubmissionForm`: supports text/code/file submission modes.
+
+---
+
+## 7) Scalability and Future AI Readiness
+
+- Keep AI logic isolated under future `lib/ai/*` services (adapter pattern).
+- Store quiz attempts/submissions/progress as structured records (already AI-ready for analytics).
+- Use event-driven hooks (`submission.created`, `quiz.attempted`) to trigger future async AI processors.
+- Add background job queue later (e.g., BullMQ) without changing core models.
+- Introduce AI features incrementally:
+  1. AI feedback on submissions (`/api/submissions/:id/ai-feedback`)
+  2. AI-generated quizzes from lesson content (`/api/quizzes/generate`)
+  3. AI progress risk analysis (`/api/progress/insights`)
+
+This architecture keeps today’s non-AI product simple while allowing AI additions later with minimal refactoring.
