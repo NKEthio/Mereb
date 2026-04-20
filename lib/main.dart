@@ -39,14 +39,16 @@ class Course {
 }
 
 class PrototypeHomePage extends StatefulWidget {
-  const PrototypeHomePage({super.key});
+  const PrototypeHomePage({super.key, this.courses});
+
+  final List<Course>? courses;
 
   @override
   State<PrototypeHomePage> createState() => _PrototypeHomePageState();
 }
 
 class _PrototypeHomePageState extends State<PrototypeHomePage> {
-  final List<Course> _courses = const [
+  static const List<Course> _defaultCourses = [
     Course(
       id: 'c1',
       title: 'Foundations of Algebra',
@@ -80,6 +82,7 @@ class _PrototypeHomePageState extends State<PrototypeHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final courses = widget.courses ?? _defaultCourses;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mereb E-Learning'),
@@ -87,9 +90,9 @@ class _PrototypeHomePageState extends State<PrototypeHomePage> {
       body: IndexedStack(
         index: _selectedIndex,
         children: [
-          _DashboardTab(courses: _courses),
-          _CoursesTab(courses: _courses),
-          _ProfileTab(courses: _courses),
+          _DashboardTab(courses: courses),
+          _CoursesTab(courses: courses),
+          _ProfileTab(courses: courses),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -120,13 +123,13 @@ class _DashboardTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inProgress = courses.where((course) => course.progress > 0).toList();
-    final avgProgress = courses.isEmpty
+    final avgProgress = inProgress.isEmpty
         ? 0.0
-        : courses.fold<double>(
+        : inProgress.fold<double>(
               0,
               (total, course) => total + course.progress,
             ) /
-            courses.length;
+            inProgress.length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -155,15 +158,23 @@ class _DashboardTab extends StatelessWidget {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        ...inProgress.map(
-          (course) => Card(
+        if (inProgress.isEmpty)
+          const Card(
             child: ListTile(
-              title: Text(course.title),
-              subtitle: Text('${(course.progress * 100).toStringAsFixed(0)}% complete'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              title: Text('No courses in progress yet.'),
+              subtitle: Text('Browse Courses to start learning.'),
+            ),
+          )
+        else
+          ...inProgress.map(
+            (course) => Card(
+              child: ListTile(
+                title: Text(course.title),
+                subtitle: Text('${(course.progress * 100).toStringAsFixed(0)}% complete'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -253,7 +264,13 @@ class CourseDetailsPage extends StatelessWidget {
           Text('Progress: ${(course.progress * 100).toStringAsFixed(0)}%'),
           const SizedBox(height: 20),
           FilledButton.icon(
-            onPressed: () {},
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Lesson playback coming soon.'),
+                ),
+              );
+            },
             icon: const Icon(Icons.play_arrow),
             label: const Text('Start lesson (prototype)'),
           ),
