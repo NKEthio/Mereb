@@ -203,7 +203,7 @@ model Question {
   quizId         String
   prompt         String
   type           QuestionType
-  options        Json?         // MULTIPLE_CHOICE format: string[] or [{ id: string, text: string }]
+  options        Json?         // MULTIPLE_CHOICE format (preferred): [{ id: string, text: string }]
   correctAnswer  String
   orderIndex     Int
 
@@ -243,7 +243,7 @@ model QuizAttempt {
   id             String        @id @default(cuid())
   quizId         String
   userId         String
-  answers        Json          // Format: { [questionId: string]: string }
+  answers        Json          // Format: { [questionId: Question.id]: string }
   score          Int
   passed         Boolean
   attemptedAt    DateTime      @default(now())
