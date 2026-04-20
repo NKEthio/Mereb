@@ -203,7 +203,7 @@ model Question {
   quizId         String
   prompt         String
   type           QuestionType
-  options        Json?
+  options        Json?         // MULTIPLE_CHOICE format: string[] or [{ id: string, text: string }]
   correctAnswer  String
   orderIndex     Int
 
@@ -243,7 +243,7 @@ model QuizAttempt {
   id             String        @id @default(cuid())
   quizId         String
   userId         String
-  answers        Json
+  answers        Json          // Format: { [questionId: string]: string }
   score          Int
   passed         Boolean
   attemptedAt    DateTime      @default(now())
@@ -463,7 +463,7 @@ await prisma.submission.findMany({
 - Use event-driven hooks (`submission.created`, `quiz.attempted`) to trigger future async AI processors.
 - Add background job queue later (e.g., BullMQ) without changing core models.
 - Introduce AI features incrementally:
-  1. AI feedback on submissions (`/api/submissions/:id/ai-feedback`)
+  1. AI feedback on submissions (`/api/submissions/:submissionId/ai-feedback`)
   2. AI-generated quizzes from lesson content (`/api/quizzes/generate`)
   3. AI progress risk analysis (`/api/progress/insights`)
 
