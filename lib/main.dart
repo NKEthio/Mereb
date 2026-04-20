@@ -120,11 +120,13 @@ class _DashboardTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inProgress = courses.where((course) => course.progress > 0).toList();
-    final avgProgress = courses.fold<double>(
-          0,
-          (total, course) => total + course.progress,
-        ) /
-        courses.length;
+    final avgProgress = courses.isEmpty
+        ? 0.0
+        : courses.fold<double>(
+              0,
+              (total, course) => total + course.progress,
+            ) /
+            courses.length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
