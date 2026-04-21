@@ -8,6 +8,8 @@ void main() {
 
     expect(find.text('Mereb E-Learning'), findsOneWidget);
     expect(find.text('Continue learning'), findsOneWidget);
+    expect(find.text('Suggested features'), findsOneWidget);
+    expect(find.text('Daily learning reminders'), findsOneWidget);
   });
 
   testWidgets('Home shows empty continue-learning state', (WidgetTester tester) async {

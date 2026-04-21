@@ -38,6 +38,18 @@ class Course {
   final String description;
 }
 
+class SuggestedFeature {
+  const SuggestedFeature({
+    required this.title,
+    required this.description,
+    required this.icon,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
+}
+
 class PrototypeHomePage extends StatefulWidget {
   const PrototypeHomePage({super.key, this.courses});
 
@@ -119,6 +131,28 @@ class _DashboardTab extends StatelessWidget {
   const _DashboardTab({required this.courses});
 
   final List<Course> courses;
+  static const List<SuggestedFeature> _suggestedFeatures = [
+    SuggestedFeature(
+      title: 'Daily learning reminders',
+      description: 'Get nudges to keep your study streak going.',
+      icon: Icons.notifications_active_outlined,
+    ),
+    SuggestedFeature(
+      title: 'Offline lesson downloads',
+      description: 'Save lessons for low-connectivity learning.',
+      icon: Icons.download_for_offline_outlined,
+    ),
+    SuggestedFeature(
+      title: 'Peer discussion groups',
+      description: 'Join classmates to ask questions and share tips.',
+      icon: Icons.groups_outlined,
+    ),
+    SuggestedFeature(
+      title: 'Weekly progress report',
+      description: 'Track wins and identify what to focus on next.',
+      icon: Icons.insights_outlined,
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -175,6 +209,21 @@ class _DashboardTab extends StatelessWidget {
               ),
             ),
           ),
+        const SizedBox(height: 16),
+        const Text(
+          'Suggested features',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        ..._suggestedFeatures.map(
+          (feature) => Card(
+            child: ListTile(
+              leading: Icon(feature.icon),
+              title: Text(feature.title),
+              subtitle: Text(feature.description),
+            ),
+          ),
+        ),
       ],
     );
   }
