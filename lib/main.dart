@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
+import 'auth_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MerebApp());
 }
 
@@ -20,29 +28,27 @@ class MerebApp extends StatelessWidget {
   }
 }
 
-class AppGate extends StatefulWidget {
+class AppGate extends StatelessWidget {
   const AppGate({super.key});
 
   @override
-  State<AppGate> createState() => _AppGateState();
-}
-
-class _AppGateState extends State<AppGate> {
-  bool _isLoggedIn = false;
-
-  void _handleLogin() {
-    setState(() {
-      _isLoggedIn = true;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_isLoggedIn) {
-      return const PrototypeHomePage();
-    }
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
 
-    return LoginPage(onSignIn: _handleLogin);
+        if (snapshot.hasData) {
+          return const PrototypeHomePage();
+        }
+
+        return const LoginPage();
+      },
+    );
   }
 }
 
@@ -77,9 +83,7 @@ class SuggestedFeature {
 }
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.onSignIn});
-
-  final VoidCallback onSignIn;
+  const LoginPage({super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -89,7 +93,10 @@ class _LoginPageState extends State<LoginPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _obscurePassword = true;
+  bool _isLoading = false;
+  bool _isSignUp = false;
 
   @override
   void dispose() {
@@ -98,13 +105,48 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) {
-      return;
-    }
+    if (!isValid) return;
 
-    widget.onSignIn();
+    setState(() => _isLoading = true);
+
+    try {
+      if (_isSignUp) {
+        await _authService.signUpWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+      } else {
+        await _authService.signInWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      await _authService.signInWithGoogle();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -131,17 +173,19 @@ class _LoginPageState extends State<LoginPage> {
                           child: Icon(Icons.school_outlined, size: 30),
                         ),
                         const SizedBox(height: 20),
-                        const Text(
-                          'Welcome to Mereb',
+                        Text(
+                          _isSignUp ? 'Create Account' : 'Welcome to Mereb',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Sign in to continue your learning journey.',
+                          _isSignUp
+                              ? 'Join our learning community today.'
+                              : 'Sign in to continue your learning journey.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -202,23 +246,49 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 20),
                         FilledButton(
                           key: const Key('login_button'),
-                          onPressed: _submit,
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 14),
-                            child: Text('Sign in'),
+                          onPressed: _isLoading ? null : _submit,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(_isSignUp ? 'Sign up' : 'Sign in'),
                           ),
                         ),
                         const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _signInWithGoogle,
+                          icon: const Icon(Icons.login), // Replace with Google icon if available
+                          label: const Text('Sign in with Google'),
+                        ),
+                        const SizedBox(height: 16),
                         TextButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Password reset flow coming soon.'),
-                              ),
-                            );
+                            setState(() {
+                              _isSignUp = !_isSignUp;
+                            });
                           },
-                          child: const Text('Forgot password?'),
+                          child: Text(_isSignUp
+                              ? 'Already have an account? Sign in'
+                              : 'Don\'t have an account? Sign up'),
                         ),
+                        if (!_isSignUp)
+                          TextButton(
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Password reset flow coming soon.'),
+                                ),
+                              );
+                            },
+                            child: const Text('Forgot password?'),
+                          ),
                       ],
                     ),
                   ),
@@ -450,22 +520,48 @@ class _ProfileTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
     final completed = courses.where((course) => course.progress >= 1).length;
+    
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CircleAvatar(radius: 32, child: Icon(Icons.person, size: 36)),
+          CircleAvatar(
+            radius: 32, 
+            backgroundImage: user?.photoURL != null 
+              ? NetworkImage(user!.photoURL!) 
+              : null,
+            child: user?.photoURL == null 
+              ? const Icon(Icons.person, size: 36) 
+              : null,
+          ),
           const SizedBox(height: 12),
-          const Text('Prototype Learner',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(
+            user?.displayName ?? 'Learner',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 4),
-          const Text('learner@mereb.app'),
+          Text(user?.email ?? 'No email available'),
           const Divider(height: 32),
           Text('Enrolled courses: ${courses.length}'),
           const SizedBox(height: 8),
           Text('Completed courses: $completed'),
+          const Spacer(),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => AuthService().signOut(),
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign out'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+                side: BorderSide(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
