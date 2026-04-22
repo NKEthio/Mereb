@@ -17,6 +17,15 @@ class DatabaseService {
     return null;
   }
 
+  Future<List<AppUser>> getAllUsers() async {
+    final snapshot = await _db.collection('users').get();
+    return snapshot.docs.map((doc) => AppUser.fromMap(doc.data(), doc.id)).toList();
+  }
+
+  Future<void> updateUserRole(String uid, UserRole role) async {
+    await _db.collection('users').doc(uid).update({'role': role.name});
+  }
+
   // Course operations
   Future<void> createCourse(Course course) async {
     await _db.collection('courses').add(course.toMap());
