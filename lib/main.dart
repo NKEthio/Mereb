@@ -1,15 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'firebase_options.dart';
 import 'auth_service.dart';
+import 'models/models.dart' as models;
+import 'services/database_service.dart';
+import 'teacher_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MerebApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        Provider<AuthService>(create: (_) => AuthService()),
+        Provider<DatabaseService>(create: (_) => DatabaseService()),
+        StreamProvider<User?>(
+          create: (context) => context.read<AuthService>().user,
+          initialData: null,
+        ),
+      ],
+      child: const MerebApp(),
+    ),
+  );
 }
 
 class MerebApp extends StatelessWidget {
@@ -33,8 +50,14 @@ class AppGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    final user = context.watch<User?>();
+
+    if (user == null) {
+      return const LoginPage();
+    }
+
+    return FutureBuilder<models.AppUser?>(
+      future: context.read<DatabaseService>().getUser(user.uid),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -42,32 +65,29 @@ class AppGate extends StatelessWidget {
           );
         }
 
-        if (snapshot.hasData) {
-          return const PrototypeHomePage();
+        final appUser = snapshot.data;
+        if (appUser == null) {
+          // If Firestore document doesn't exist yet, we might need to wait or handle it.
+          // For now, assume it's being created.
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
-        return const LoginPage();
+        if (appUser.role == models.UserRole.teacher) {
+          return Provider<models.AppUser>.value(
+            value: appUser,
+            child: const TeacherDashboard(),
+          );
+        }
+
+        return Provider<models.AppUser>.value(
+          value: appUser,
+          child: const PrototypeHomePage(),
+        );
       },
     );
   }
-}
-
-class Course {
-  const Course({
-    required this.id,
-    required this.title,
-    required this.instructor,
-    required this.lessons,
-    required this.progress,
-    required this.description,
-  });
-
-  final String id;
-  final String title;
-  final String instructor;
-  final int lessons;
-  final double progress;
-  final String description;
 }
 
 class SuggestedFeature {
@@ -93,7 +113,6 @@ class _LoginPageState extends State<LoginPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _isSignUp = false;
@@ -112,13 +131,14 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
+      final authService = context.read<AuthService>();
       if (_isSignUp) {
-        await _authService.signUpWithEmail(
+        await authService.signUpWithEmail(
           _emailController.text.trim(),
           _passwordController.text,
         );
       } else {
-        await _authService.signInWithEmail(
+        await authService.signInWithEmail(
           _emailController.text.trim(),
           _passwordController.text,
         );
@@ -137,7 +157,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      await _authService.signInWithGoogle();
+      await context.read<AuthService>().signInWithGoogle();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -303,78 +323,51 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 class PrototypeHomePage extends StatefulWidget {
-  const PrototypeHomePage({super.key, this.courses});
-
-  final List<Course>? courses;
+  const PrototypeHomePage({super.key});
 
   @override
   State<PrototypeHomePage> createState() => _PrototypeHomePageState();
 }
 
 class _PrototypeHomePageState extends State<PrototypeHomePage> {
-  static const List<Course> _defaultCourses = [
-    Course(
-      id: 'c1',
-      title: 'Foundations of Algebra',
-      instructor: 'Ms. Rahel',
-      lessons: 18,
-      progress: 0.35,
-      description:
-          'Learn core algebra skills including equations, variables, and functions.',
-    ),
-    Course(
-      id: 'c2',
-      title: 'Introduction to Biology',
-      instructor: 'Dr. Hana',
-      lessons: 24,
-      progress: 0.7,
-      description:
-          'Explore cells, genetics, ecosystems, and practical scientific thinking.',
-    ),
-    Course(
-      id: 'c3',
-      title: 'Digital Literacy Basics',
-      instructor: 'Mr. Abel',
-      lessons: 12,
-      progress: 0.15,
-      description:
-          'Build confidence in using digital tools safely and effectively.',
-    ),
-  ];
-
   int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
-    final courses = widget.courses ?? _defaultCourses;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mereb E-Learning'),
-      ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          _DashboardTab(courses: courses),
-          _CoursesTab(courses: courses),
-          _ProfileTab(courses: courses),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (value) {
-          setState(() {
-            _selectedIndex = value;
-          });
-        },
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            label: 'Courses',
+    return StreamBuilder<List<models.Course>>(
+      stream: context.read<DatabaseService>().streamCourses(),
+      builder: (context, snapshot) {
+        final courses = snapshot.data ?? [];
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Mereb E-Learning'),
           ),
-          NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
-        ],
-      ),
+          body: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              _DashboardTab(courses: courses),
+              _CoursesTab(courses: courses),
+              _ProfileTab(courses: courses),
+            ],
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (value) {
+              setState(() {
+                _selectedIndex = value;
+              });
+            },
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
+              NavigationDestination(
+                icon: Icon(Icons.menu_book_outlined),
+                label: 'Courses',
+              ),
+              NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -382,7 +375,7 @@ class _PrototypeHomePageState extends State<PrototypeHomePage> {
 class _DashboardTab extends StatelessWidget {
   const _DashboardTab({required this.courses});
 
-  final List<Course> courses;
+  final List<models.Course> courses;
   static const List<SuggestedFeature> _suggestedFeatures = [
     SuggestedFeature(
       title: 'Daily learning reminders',
@@ -408,14 +401,8 @@ class _DashboardTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inProgress = courses.where((course) => course.progress > 0).toList();
-    final avgProgress = inProgress.isEmpty
-        ? 0.0
-        : inProgress.fold<double>(
-              0,
-              (total, course) => total + course.progress,
-            ) /
-            inProgress.length;
+    // In a real app, progress would be tracked per user in Firestore
+    const avgProgress = 0.0;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -440,24 +427,30 @@ class _DashboardTab extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'Continue learning',
+          'Available courses',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        if (inProgress.isEmpty)
+        if (courses.isEmpty)
           const Card(
             child: ListTile(
-              title: Text('No courses in progress yet.'),
-              subtitle: Text('Browse Courses to start learning.'),
+              title: Text('No courses available yet.'),
             ),
           )
         else
-          ...inProgress.map(
+          ...courses.take(3).map(
             (course) => Card(
               child: ListTile(
                 title: Text(course.title),
-                subtitle: Text('${(course.progress * 100).toStringAsFixed(0)}% complete'),
+                subtitle: Text('by ${course.instructorName}'),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => CourseDetailsPage(course: course),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -484,7 +477,7 @@ class _DashboardTab extends StatelessWidget {
 class _CoursesTab extends StatelessWidget {
   const _CoursesTab({required this.courses});
 
-  final List<Course> courses;
+  final List<models.Course> courses;
 
   @override
   Widget build(BuildContext context) {
@@ -497,7 +490,7 @@ class _CoursesTab extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 8),
           child: ListTile(
             title: Text(course.title),
-            subtitle: Text('${course.instructor} • ${course.lessons} lessons'),
+            subtitle: Text('${course.instructorName} • ${course.lessons} lessons'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(
@@ -516,12 +509,12 @@ class _CoursesTab extends StatelessWidget {
 class _ProfileTab extends StatelessWidget {
   const _ProfileTab({required this.courses});
 
-  final List<Course> courses;
+  final List<models.Course> courses;
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final completed = courses.where((course) => course.progress >= 1).length;
+    final appUser = context.watch<models.AppUser>();
     
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -539,20 +532,22 @@ class _ProfileTab extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            user?.displayName ?? 'Learner',
+            appUser.displayName ?? 'Learner',
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          Text(user?.email ?? 'No email available'),
+          Text(appUser.email),
+          const SizedBox(height: 4),
+          Chip(label: Text(appUser.role.name.toUpperCase())),
           const Divider(height: 32),
-          Text('Enrolled courses: ${courses.length}'),
+          Text('Enrolled courses: 0'), // Simplified for prototype
           const SizedBox(height: 8),
-          Text('Completed courses: $completed'),
+          Text('Completed courses: 0'),
           const Spacer(),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => AuthService().signOut(),
+              onPressed: () => context.read<AuthService>().signOut(),
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
               style: OutlinedButton.styleFrom(
@@ -568,27 +563,65 @@ class _ProfileTab extends StatelessWidget {
   }
 }
 
-class CourseDetailsPage extends StatelessWidget {
+class CourseDetailsPage extends StatefulWidget {
   const CourseDetailsPage({super.key, required this.course});
 
-  final Course course;
+  final models.Course course;
+
+  @override
+  State<CourseDetailsPage> createState() => _CourseDetailsPageState();
+}
+
+class _CourseDetailsPageState extends State<CourseDetailsPage> {
+  YoutubePlayerController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.course.youtubeUrl != null && widget.course.youtubeUrl!.isNotEmpty) {
+      final videoId = YoutubePlayer.convertUrlToId(widget.course.youtubeUrl!);
+      if (videoId != null) {
+        _controller = YoutubePlayerController(
+          initialVideoId: videoId,
+          flags: const YoutubePlayerFlags(
+            autoPlay: false,
+            mute: false,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(course.title)),
+      appBar: AppBar(title: Text(widget.course.title)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(course.description, style: const TextStyle(fontSize: 16)),
+          if (_controller != null)
+            YoutubePlayer(
+              controller: _controller!,
+              showVideoProgressIndicator: true,
+            )
+          else
+            Container(
+              height: 200,
+              color: Colors.grey[300],
+              child: const Center(child: Text('No video available')),
+            ),
           const SizedBox(height: 16),
-          Text('Instructor: ${course.instructor}'),
+          Text(widget.course.description, style: const TextStyle(fontSize: 16)),
+          const SizedBox(height: 16),
+          Text('Instructor: ${widget.course.instructorName}'),
           const SizedBox(height: 8),
-          Text('Lessons: ${course.lessons}'),
-          const SizedBox(height: 12),
-          LinearProgressIndicator(value: course.progress),
-          const SizedBox(height: 8),
-          Text('Progress: ${(course.progress * 100).toStringAsFixed(0)}%'),
+          Text('Lessons: ${widget.course.lessons}'),
           const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: () {

@@ -1,9 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'models/models.dart';
+import 'services/database_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final DatabaseService _db = DatabaseService();
 
   // Stream of auth state changes
   Stream<User?> get user => _auth.authStateChanges();
@@ -16,6 +18,7 @@ class AuthService {
         password: password,
       );
     } on FirebaseAuthException catch (e) {
+      // ignore: avoid_print
       print('Firebase Auth Error: ${e.code}');
       rethrow;
     }
@@ -24,11 +27,20 @@ class AuthService {
   // Sign up with Email and Password
   Future<UserCredential?> signUpWithEmail(String email, String password) async {
     try {
-      return await _auth.createUserWithEmailAndPassword(
+      final cred = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+      if (cred.user != null) {
+        await _db.createUser(AppUser(
+          id: cred.user!.uid,
+          email: email,
+          role: UserRole.student,
+        ));
+      }
+      return cred;
     } on FirebaseAuthException catch (e) {
+      // ignore: avoid_print
       print('Firebase Auth Error: ${e.code}');
       rethrow;
     }
@@ -37,16 +49,30 @@ class AuthService {
   // Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      // For google_sign_in >= 7.1.0, use GoogleSignIn.instance
+      // Note: In some recent versions, signIn() might be replaced by authenticate()
+      final GoogleSignInAccount? googleUser = await GoogleSignIn.instance.authenticate();
       if (googleUser == null) return null;
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
+        accessToken: googleAuth.idToken, // Fallback if accessToken is missing
         idToken: googleAuth.idToken,
       );
 
-      return await _auth.signInWithCredential(credential);
+      final cred = await _auth.signInWithCredential(credential);
+      if (cred.user != null) {
+        final existingUser = await _db.getUser(cred.user!.uid);
+        if (existingUser == null) {
+          await _db.createUser(AppUser(
+            id: cred.user!.uid,
+            email: cred.user!.email ?? '',
+            role: UserRole.student,
+            displayName: cred.user!.displayName,
+          ));
+        }
+      }
+      return cred;
     } catch (e) {
       print('Google Sign-In Error: $e');
       rethrow;
@@ -55,7 +81,7 @@ class AuthService {
 
   // Sign out
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    await GoogleSignIn.instance.signOut();
     await _auth.signOut();
   }
 }
