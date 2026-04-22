@@ -15,8 +15,34 @@ class MerebApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      home: const PrototypeHomePage(),
+      home: const AppGate(),
     );
+  }
+}
+
+class AppGate extends StatefulWidget {
+  const AppGate({super.key});
+
+  @override
+  State<AppGate> createState() => _AppGateState();
+}
+
+class _AppGateState extends State<AppGate> {
+  bool _isLoggedIn = false;
+
+  void _handleLogin() {
+    setState(() {
+      _isLoggedIn = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoggedIn) {
+      return const PrototypeHomePage();
+    }
+
+    return LoginPage(onSignIn: _handleLogin);
   }
 }
 
@@ -48,6 +74,162 @@ class SuggestedFeature {
   final String title;
   final String description;
   final IconData icon;
+}
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key, required this.onSignIn});
+
+  final VoidCallback onSignIn;
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final isValid = _formKey.currentState?.validate() ?? false;
+    if (!isValid) {
+      return;
+    }
+
+    widget.onSignIn();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Card(
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircleAvatar(
+                          radius: 28,
+                          child: Icon(Icons.school_outlined, size: 30),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Welcome to Mereb',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sign in to continue your learning journey.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        TextFormField(
+                          key: const Key('login_email_field'),
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Email',
+                            prefixIcon: Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Please enter your email.';
+                            }
+                            if (!value.contains('@')) {
+                              return 'Enter a valid email address.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          key: const Key('login_password_field'),
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your password.';
+                            }
+                            if (value.length < 6) {
+                              return 'Password must be at least 6 characters.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        FilledButton(
+                          key: const Key('login_button'),
+                          onPressed: _submit,
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                            child: Text('Sign in'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Password reset flow coming soon.'),
+                              ),
+                            );
+                          },
+                          child: const Text('Forgot password?'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class PrototypeHomePage extends StatefulWidget {
