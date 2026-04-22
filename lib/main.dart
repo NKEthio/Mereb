@@ -8,6 +8,8 @@ import 'auth_service.dart';
 import 'models/models.dart' as models;
 import 'services/database_service.dart';
 import 'teacher_dashboard.dart';
+import 'admin_dashboard.dart';
+import 'lesson_view_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +73,13 @@ class AppGate extends StatelessWidget {
           // For now, assume it's being created.
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (appUser.role == models.UserRole.admin) {
+          return Provider<models.AppUser>.value(
+            value: appUser,
+            child: const AdminDashboard(),
           );
         }
 
@@ -490,7 +499,8 @@ class _CoursesTab extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 8),
           child: ListTile(
             title: Text(course.title),
-            subtitle: Text('${course.instructorName} • ${course.lessons} lessons'),
+            subtitle:
+                Text('${course.instructorName} • ${course.lessonsCount} lessons'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(
@@ -578,7 +588,8 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.course.youtubeUrl != null && widget.course.youtubeUrl!.isNotEmpty) {
+    if (widget.course.youtubeUrl != null &&
+        widget.course.youtubeUrl!.isNotEmpty) {
       final videoId = YoutubePlayer.convertUrlToId(widget.course.youtubeUrl!);
       if (videoId != null) {
         _controller = YoutubePlayerController(
@@ -621,19 +632,28 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
           const SizedBox(height: 16),
           Text('Instructor: ${widget.course.instructorName}'),
           const SizedBox(height: 8),
-          Text('Lessons: ${widget.course.lessons}'),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Lesson playback coming soon.'),
-                ),
-              );
-            },
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('Start lesson (prototype)'),
+          Text('Lessons: ${widget.course.lessonsCount}'),
+          const Divider(height: 32),
+          const Text(
+            'Course Content',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: 8),
+          if (widget.course.lessonsList.isEmpty)
+            const Text('No lessons available yet.')
+          else
+            ...widget.course.lessonsList.map((lesson) => ListTile(
+                  leading: const Icon(Icons.play_circle_outline),
+                  title: Text(lesson.title),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LessonViewPage(lesson: lesson),
+                      ),
+                    );
+                  },
+                )),
         ],
       ),
     );

@@ -38,7 +38,7 @@ class TeacherDashboard extends StatelessWidget {
               final course = myCourses[index];
               return ListTile(
                 title: Text(course.title),
-                subtitle: Text('${course.lessons} lessons'),
+                subtitle: Text('${course.lessonsCount} lessons'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
