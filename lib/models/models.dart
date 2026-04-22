@@ -146,6 +146,9 @@ class Course {
   final String instructorName;
   final String? youtubeUrl;
   final List<Lesson> lessonsList;
+  final String cost;
+  final String duration;
+  final String level;
 
   Course({
     required this.id,
@@ -155,6 +158,9 @@ class Course {
     required this.instructorName,
     this.youtubeUrl,
     this.lessonsList = const [],
+    this.cost = 'Free',
+    this.duration = 'N/A',
+    this.level = 'Beginner',
   });
 
   factory Course.fromMap(Map<String, dynamic> data, String documentId) {
@@ -169,6 +175,9 @@ class Course {
               ?.map((l) => Lesson.fromMap(l as Map<String, dynamic>))
               .toList() ??
           [],
+      cost: data['cost'] ?? 'Free',
+      duration: data['duration'] ?? 'N/A',
+      level: data['level'] ?? 'Beginner',
     );
   }
 
@@ -180,8 +189,83 @@ class Course {
       'instructorName': instructorName,
       'youtubeUrl': youtubeUrl,
       'lessonsList': lessonsList.map((l) => l.toMap()).toList(),
+      'cost': cost,
+      'duration': duration,
+      'level': level,
     };
   }
 
   int get lessonsCount => lessonsList.length;
+}
+
+enum EnrollmentStatus { pending, approved, rejected }
+
+class EnrollmentRequest {
+  final String id;
+  final String studentId;
+  final String studentName;
+  final String courseId;
+  final String courseTitle;
+  final EnrollmentStatus status;
+
+  EnrollmentRequest({
+    required this.id,
+    required this.studentId,
+    required this.studentName,
+    required this.courseId,
+    required this.courseTitle,
+    required this.status,
+  });
+
+  factory EnrollmentRequest.fromMap(Map<String, dynamic> data, String documentId) {
+    return EnrollmentRequest(
+      id: documentId,
+      studentId: data['studentId'] ?? '',
+      studentName: data['studentName'] ?? '',
+      courseId: data['courseId'] ?? '',
+      courseTitle: data['courseTitle'] ?? '',
+      status: EnrollmentStatus.values.firstWhere(
+        (e) => e.name == (data['status'] ?? 'pending'),
+        orElse: () => EnrollmentStatus.pending,
+      ),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'studentId': studentId,
+      'studentName': studentName,
+      'courseId': courseId,
+      'courseTitle': courseTitle,
+      'status': status.name,
+    };
+  }
+}
+
+class UserProgress {
+  final String userId;
+  final String courseId;
+  final List<String> completedLessonIds;
+
+  UserProgress({
+    required this.userId,
+    required this.courseId,
+    this.completedLessonIds = const [],
+  });
+
+  factory UserProgress.fromMap(Map<String, dynamic> data) {
+    return UserProgress(
+      userId: data['userId'] ?? '',
+      courseId: data['courseId'] ?? '',
+      completedLessonIds: List<String>.from(data['completedLessonIds'] ?? []),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'userId': userId,
+      'courseId': courseId,
+      'completedLessonIds': completedLessonIds,
+    };
+  }
 }
