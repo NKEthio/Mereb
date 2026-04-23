@@ -36,6 +36,19 @@ Optional: run directly in the browser:
 flutter run -d chrome
 ```
 
+## Admin and Teacher Access
+
+To access the Admin or Teacher dashboards, you can sign up with the following reserved email addresses. The system automatically assigns the corresponding roles upon registration.
+
+- **Admin Account**:
+  - Email: `admin@mereb.com`
+  - Recommended Password: `admin123456`
+- **Teacher Account**:
+  - Email: `teacher@mereb.com`
+  - Recommended Password: `teacher123456`
+
+After signing up with these emails, you will be directed to the respective dashboards.
+
 ## Validate
 
 ```bash
