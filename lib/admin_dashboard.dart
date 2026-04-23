@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'models/models.dart';
 import 'services/database_service.dart';
+import 'services/data_seeder.dart';
 import 'auth_service.dart';
 
 class AdminDashboard extends StatelessWidget {
@@ -16,8 +17,13 @@ class AdminDashboard extends StatelessWidget {
           title: const Text('Admin Dashboard'),
           actions: [
             IconButton(
+              tooltip: 'Seed Sample Data',
+              icon: const Icon(Icons.data_exploration_outlined),
+              onPressed: () => _seedData(context),
+            ),
+            IconButton(
               icon: const Icon(Icons.logout),
-              onPressed: () => context.read<AuthService>().signOut(),
+              onPressed: () => _showSignOutDialog(context),
             ),
           ],
           bottom: const TabBar(
@@ -39,6 +45,48 @@ class AdminDashboard extends StatelessWidget {
       ),
     );
   }
+}
+
+void _seedData(BuildContext context) async {
+  final appUser = context.read<AppUser>();
+  final seeder = DataSeeder();
+  try {
+    await seeder.seedSampleCourses(appUser.id, appUser.displayName ?? 'Admin');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sample courses seeded successfully!')),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error seeding data: $e')),
+      );
+    }
+  }
+}
+
+void _showSignOutDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Sign Out'),
+      content: const Text('Are you sure you want to sign out?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context);
+            context.read<AuthService>().signOut();
+          },
+          child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
 }
 
 class UserManagementTab extends StatelessWidget {

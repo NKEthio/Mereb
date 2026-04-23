@@ -32,10 +32,17 @@ class AuthService {
         password: password,
       );
       if (cred.user != null) {
+        UserRole role = UserRole.student;
+        if (email == 'admin@mereb.com') {
+          role = UserRole.admin;
+        } else if (email == 'teacher@mereb.com') {
+          role = UserRole.teacher;
+        }
+
         await _db.createUser(AppUser(
           id: cred.user!.uid,
           email: email,
-          role: UserRole.student,
+          role: role,
         ));
       }
       return cred;
@@ -81,7 +88,12 @@ class AuthService {
 
   // Sign out
   Future<void> signOut() async {
-    await GoogleSignIn.instance.signOut();
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (e) {
+      // ignore: avoid_print
+      print('Google Sign-In Sign-Out Error: $e');
+    }
     await _auth.signOut();
   }
 }

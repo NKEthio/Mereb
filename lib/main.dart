@@ -607,7 +607,7 @@ class _ProfileTab extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => context.read<AuthService>().signOut(),
+              onPressed: () => _showSignOutDialog(context),
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
               style: OutlinedButton.styleFrom(
@@ -621,6 +621,29 @@ class _ProfileTab extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showSignOutDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Sign Out'),
+      content: const Text('Are you sure you want to sign out?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context);
+            context.read<AuthService>().signOut();
+          },
+          child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
 }
 
 class CourseDetailsPage extends StatefulWidget {
