@@ -410,75 +410,125 @@ class _DashboardTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // In a real app, progress would be tracked per user in Firestore
-    const avgProgress = 0.0;
+    final appUser = context.watch<models.AppUser>();
+    final db = context.read<DatabaseService>();
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Welcome back 👋',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    return StreamBuilder<List<String>>(
+      stream: db.streamEnrolledCourseIds(appUser.id),
+      builder: (context, enrolledSnapshot) {
+        final enrolledIds = enrolledSnapshot.data ?? [];
+        final enrolledCourses = courses.where((c) => enrolledIds.contains(c.id)).toList();
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'Welcome back 👋',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Your enrolled courses',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            if (enrolledCourses.isEmpty)
+              const Card(
+                child: ListTile(
+                  title: Text('You are not enrolled in any courses yet.'),
                 ),
-                const SizedBox(height: 8),
-                Text('Overall progress: ${(avgProgress * 100).toStringAsFixed(0)}%'),
-                const SizedBox(height: 10),
-                LinearProgressIndicator(value: avgProgress),
-              ],
+              )
+            else
+              ...enrolledCourses.map((course) {
+                return StreamBuilder<models.UserProgress?>(
+                  stream: db.streamUserProgress(appUser.id, course.id),
+                  builder: (context, progressSnapshot) {
+                    final progress = progressSnapshot.data;
+                    final completedCount = progress?.completedLessonIds.length ?? 0;
+                    final totalCount = course.lessonsCount;
+                    final percentage = totalCount > 0 ? completedCount / totalCount : 0.0;
+
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(course.title,
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('by ${course.instructorName}'),
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => CourseDetailsPage(course: course),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: LinearProgressIndicator(
+                                    value: percentage,
+                                    backgroundColor: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text('${(percentage * 100).toStringAsFixed(0)}%'),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }),
+            const SizedBox(height: 24),
+            const Text(
+              'Discover more courses',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Available courses',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        if (courses.isEmpty)
-          const Card(
-            child: ListTile(
-              title: Text('No courses available yet.'),
-            ),
-          )
-        else
-          ...courses.take(3).map(
-            (course) => Card(
-              child: ListTile(
-                title: Text(course.title),
-                subtitle: Text('by ${course.instructorName}'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => CourseDetailsPage(course: course),
+            const SizedBox(height: 8),
+            ...courses.where((c) => !enrolledIds.contains(c.id)).take(3).map(
+                  (course) => Card(
+                    child: ListTile(
+                      title: Text(course.title),
+                      subtitle: Text('by ${course.instructorName}'),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => CourseDetailsPage(course: course),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                ),
+            const SizedBox(height: 24),
+            const Text(
+              'Suggested features',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            ..._suggestedFeatures.map(
+              (feature) => Card(
+                child: ListTile(
+                  leading: Icon(feature.icon),
+                  title: Text(feature.title),
+                  subtitle: Text(feature.description),
+                ),
               ),
             ),
-          ),
-        const SizedBox(height: 16),
-        const Text(
-          'Suggested features',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        ..._suggestedFeatures.map(
-          (feature) => Card(
-            child: ListTile(
-              leading: Icon(feature.icon),
-              title: Text(feature.title),
-              subtitle: Text(feature.description),
-            ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
@@ -609,52 +659,187 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
     super.dispose();
   }
 
+  Future<void> _applyForCourse(BuildContext context) async {
+    final appUser = context.read<models.AppUser>();
+    final db = context.read<DatabaseService>();
+
+    final request = models.EnrollmentRequest(
+      id: '',
+      studentId: appUser.id,
+      studentName: appUser.displayName ?? appUser.email,
+      courseId: widget.course.id,
+      courseTitle: widget.course.title,
+      status: models.EnrollmentStatus.pending,
+    );
+
+    try {
+      await db.createEnrollmentRequest(request);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Application submitted successfully!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final appUser = context.watch<models.AppUser>();
+    final db = context.read<DatabaseService>();
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.course.title)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (_controller != null)
-            YoutubePlayer(
-              controller: _controller!,
-              showVideoProgressIndicator: true,
-            )
-          else
-            Container(
-              height: 200,
-              color: Colors.grey[300],
-              child: const Center(child: Text('No video available')),
-            ),
-          const SizedBox(height: 16),
-          Text(widget.course.description, style: const TextStyle(fontSize: 16)),
-          const SizedBox(height: 16),
-          Text('Instructor: ${widget.course.instructorName}'),
-          const SizedBox(height: 8),
-          Text('Lessons: ${widget.course.lessonsCount}'),
-          const Divider(height: 32),
-          const Text(
-            'Course Content',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          if (widget.course.lessonsList.isEmpty)
-            const Text('No lessons available yet.')
-          else
-            ...widget.course.lessonsList.map((lesson) => ListTile(
-                  leading: const Icon(Icons.play_circle_outline),
-                  title: Text(lesson.title),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => LessonViewPage(lesson: lesson),
+      body: StreamBuilder<models.EnrollmentStatus?>(
+        stream: db.streamUserEnrollmentStatus(appUser.id, widget.course.id),
+        builder: (context, snapshot) {
+          final status = snapshot.data;
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (_controller != null)
+                YoutubePlayer(
+                  controller: _controller!,
+                  showVideoProgressIndicator: true,
+                )
+              else
+                Container(
+                  height: 200,
+                  color: Colors.grey[300],
+                  child: const Center(child: Text('No video available')),
+                ),
+              const SizedBox(height: 16),
+              Text(
+                widget.course.description,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Icon(Icons.person_outline, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Instructor: ${widget.course.instructorName}'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.layers_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Level: ${widget.course.level}'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.timer_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Duration: ${widget.course.duration}'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.attach_money_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Cost: ${widget.course.cost}'),
+                ],
+              ),
+              const Divider(height: 32),
+              if (status == null)
+                Column(
+                  children: [
+                    const Text(
+                      'Requirements set by teacher must be verified by admin.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontStyle: FontStyle.italic),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => _applyForCourse(context),
+                        child: const Text('Apply for Course'),
                       ),
-                    );
-                  },
-                )),
-        ],
+                    ),
+                  ],
+                )
+              else if (status == models.EnrollmentStatus.pending)
+                const Card(
+                  color: Colors.orange,
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.hourglass_empty, color: Colors.white),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            'Your application is pending approval by admin.',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (status == models.EnrollmentStatus.rejected)
+                const Card(
+                  color: Colors.redAccent,
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: Colors.white),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            'Your application was rejected.',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (status == models.EnrollmentStatus.approved)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Course Content',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    if (widget.course.lessonsList.isEmpty)
+                      const Text('No lessons available yet.')
+                    else
+                      ...widget.course.lessonsList.map((lesson) => ListTile(
+                            leading: const Icon(Icons.play_circle_outline),
+                            title: Text(lesson.title),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => LessonViewPage(
+                                    lesson: lesson,
+                                    courseId: widget.course.id,
+                                  ),
+                                ),
+                              );
+                            },
+                          )),
+                  ],
+                ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -18,6 +18,9 @@ class _CourseFormPageState extends State<CourseFormPage> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _youtubeUrlController;
+  late TextEditingController _costController;
+  late TextEditingController _durationController;
+  late TextEditingController _levelController;
   List<Lesson> _lessons = [];
 
   @override
@@ -26,6 +29,9 @@ class _CourseFormPageState extends State<CourseFormPage> {
     _titleController = TextEditingController(text: widget.course?.title ?? '');
     _descriptionController = TextEditingController(text: widget.course?.description ?? '');
     _youtubeUrlController = TextEditingController(text: widget.course?.youtubeUrl ?? '');
+    _costController = TextEditingController(text: widget.course?.cost ?? 'Free');
+    _durationController = TextEditingController(text: widget.course?.duration ?? 'N/A');
+    _levelController = TextEditingController(text: widget.course?.level ?? 'Beginner');
     _lessons = widget.course?.lessonsList.toList() ?? [];
   }
 
@@ -34,6 +40,9 @@ class _CourseFormPageState extends State<CourseFormPage> {
     _titleController.dispose();
     _descriptionController.dispose();
     _youtubeUrlController.dispose();
+    _costController.dispose();
+    _durationController.dispose();
+    _levelController.dispose();
     super.dispose();
   }
 
@@ -50,6 +59,9 @@ class _CourseFormPageState extends State<CourseFormPage> {
         instructorName: appUser.displayName ?? appUser.email,
         youtubeUrl: _youtubeUrlController.text,
         lessonsList: _lessons,
+        cost: _costController.text,
+        duration: _durationController.text,
+        level: _levelController.text,
       );
 
       if (widget.course == null) {
@@ -109,6 +121,18 @@ class _CourseFormPageState extends State<CourseFormPage> {
               controller: _descriptionController,
               decoration: const InputDecoration(labelText: 'Description'),
               maxLines: 3,
+            ),
+            TextFormField(
+              controller: _costController,
+              decoration: const InputDecoration(labelText: 'Cost'),
+            ),
+            TextFormField(
+              controller: _durationController,
+              decoration: const InputDecoration(labelText: 'Duration'),
+            ),
+            TextFormField(
+              controller: _levelController,
+              decoration: const InputDecoration(labelText: 'Level'),
             ),
             TextFormField(
               controller: _youtubeUrlController,

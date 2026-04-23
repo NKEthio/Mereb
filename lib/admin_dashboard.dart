@@ -10,7 +10,7 @@ class AdminDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Admin Dashboard'),
@@ -21,9 +21,11 @@ class AdminDashboard extends StatelessWidget {
             ),
           ],
           bottom: const TabBar(
+            isScrollable: true,
             tabs: [
               Tab(icon: Icon(Icons.people), text: 'Users'),
               Tab(icon: Icon(Icons.book), text: 'Courses'),
+              Tab(icon: Icon(Icons.assignment_ind), text: 'Enrollments'),
             ],
           ),
         ),
@@ -31,6 +33,7 @@ class AdminDashboard extends StatelessWidget {
           children: [
             UserManagementTab(),
             CourseManagementTab(),
+            EnrollmentManagementTab(),
           ],
         ),
       ),
@@ -137,6 +140,62 @@ class CourseManagementTab extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class EnrollmentManagementTab extends StatelessWidget {
+  const EnrollmentManagementTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final db = context.read<DatabaseService>();
+
+    return StreamBuilder<List<EnrollmentRequest>>(
+      stream: db.streamEnrollmentRequests(status: EnrollmentStatus.pending),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final requests = snapshot.data ?? [];
+
+        if (requests.isEmpty) {
+          return const Center(child: Text('No pending enrollment requests.'));
+        }
+
+        return ListView.builder(
+          itemCount: requests.length,
+          itemBuilder: (context, index) {
+            final request = requests[index];
+            return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ListTile(
+                title: Text(request.courseTitle),
+                subtitle: Text('Student: ${request.studentName}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.check, color: Colors.green),
+                      onPressed: () => db.updateEnrollmentRequestStatus(
+                        request.id,
+                        EnrollmentStatus.approved,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.red),
+                      onPressed: () => db.updateEnrollmentRequestStatus(
+                        request.id,
+                        EnrollmentStatus.rejected,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
